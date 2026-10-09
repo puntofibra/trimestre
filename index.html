@@ -668,7 +668,7 @@ function renderList(stagger){
 }
 
 function cardHTML(t, i){
-  const fs = S.archivos.filter(a => a.tareaId === t.id);
+  const fs = S.archivos.filter(a => String(a.tareaId) === String(t.id));
   const ups = Object.values(S.up).filter(u => u.tareaId === t.id);
   const open = S.open.has(t.id) || ups.length;
   const fecha = t.hecho && t.fechaHecho ? new Date(t.fechaHecho).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }) : '';
@@ -713,7 +713,7 @@ function prevConTareas(){
 $('#list').addEventListener('click', e => {
   const el = e.target.closest('[data-act]'); if (!el) return;
   const card = el.closest('.card'); const id = card && card.dataset.id;
-  const t = S.tareas.find(x => x.id === id);
+  const t = S.tareas.find(x => String(x.id) === id);
   switch (el.dataset.act){
     case 'chk': toggle(t, el); break;
     case 'open': S.open.has(id) ? S.open.delete(id) : S.open.add(id); card.classList.toggle('open'); break;
@@ -721,7 +721,7 @@ $('#list').addEventListener('click', e => {
     case 'edit': openTask(t); break;
     case 'next': copiarSiguiente(t, el); break;
     case 'del': confirmar('¿Borrar tarea?', `Se borrará “${t.titulo}”${S.archivos.some(a => a.tareaId === id) ? ' y sus documentos irán a la papelera de Drive' : ''}.`, () => borrar(t)); break;
-    case 'delf': { const fid = el.closest('.file').dataset.fid, a = S.archivos.find(x => x.id === fid); confirmar('¿Quitar documento?', `“${a.nombre}” irá a la papelera de tu Google Drive (se puede recuperar).`, () => borrarArchivo(a), 'Quitar'); } break;
+    case 'delf': { const fid = el.closest('.file').dataset.fid, a = S.archivos.find(x => String(x.id) === fid); confirmar('¿Quitar documento?', `“${a.nombre}” irá a la papelera de tu Google Drive (se puede recuperar).`, () => borrarArchivo(a), 'Quitar'); } break;
   }
 });
 

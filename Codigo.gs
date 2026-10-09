@@ -109,10 +109,10 @@ function reorder_(r) {
   const sh = hoja_('Tareas', H_TAREAS);
   const data = sh.getDataRange().getValues();
   const pos = {};
-  (r.ids || []).forEach((id, i) => pos[id] = i + 1);
+  (r.ids || []).forEach((id, i) => pos[String(id)] = i + 1);
   const col = H_TAREAS.indexOf('orden');
   for (let i = 1; i < data.length; i++) {
-    if (pos[data[i][0]]) sh.getRange(i + 1, col + 1).setValue(pos[data[i][0]]);
+    if (pos[String(data[i][0])]) sh.getRange(i + 1, col + 1).setValue(pos[String(data[i][0])]);
   }
   return { ok: true };
 }
@@ -121,13 +121,13 @@ function del_(r) {
   const sh = hoja_('Tareas', H_TAREAS);
   const data = sh.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
-    if (data[i][0] === r.id) { sh.deleteRow(i + 1); break; }
+    if (String(data[i][0]) === String(r.id)) { sh.deleteRow(i + 1); break; }
   }
   // Archivos de la tarea: a la papelera de Drive (recuperables) y fuera de la lista
   const sa = hoja_('Archivos', H_ARCH);
   const da = sa.getDataRange().getValues();
   for (let i = da.length - 1; i >= 1; i--) {
-    if (da[i][1] === r.id) {
+    if (String(da[i][1]) === String(r.id)) {
       try { DriveApp.getFileById(da[i][4]).setTrashed(true); } catch (e) {}
       sa.deleteRow(i + 1);
     }
@@ -154,7 +154,7 @@ function actualiza_(id, fn) {
   const sh = hoja_('Tareas', H_TAREAS);
   const data = sh.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === id) {
+    if (String(data[i][0]) === String(id)) {
       const t = {};
       H_TAREAS.forEach((h, j) => t[h] = data[i][j]);
       fn(t);
@@ -167,7 +167,7 @@ function actualiza_(id, fn) {
 
 /* ---------- Archivos ---------- */
 function subir_(r) {
-  const tarea = filas_('Tareas', H_TAREAS).find(t => t.id === r.tareaId);
+  const tarea = filas_('Tareas', H_TAREAS).find(t => t.id === String(r.tareaId));
   if (!tarea) throw new Error('Tarea no encontrada');
   const carpeta = carpetaTri_(tarea.trimestre, true);
   const bytes = Utilities.base64Decode(r.data);
@@ -184,7 +184,7 @@ function borrarArchivo_(r) {
   const sh = hoja_('Archivos', H_ARCH);
   const data = sh.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
-    if (data[i][0] === r.id) {
+    if (String(data[i][0]) === String(r.id)) {
       try { DriveApp.getFileById(data[i][4]).setTrashed(true); } catch (e) {}
       sh.deleteRow(i + 1);
       return { ok: true };
@@ -214,6 +214,7 @@ function hoja_(nombre, cab) {
     sh = ss.insertSheet(nombre);
     sh.getRange(1, 1, 1, cab.length).setValues([cab]).setFontWeight('bold').setBackground('#1e1b4b').setFontColor('#ffffff');
     sh.setFrozenRows(1);
+    sh.getRange('A:C').setNumberFormat('@');
   }
   return sh;
 }
@@ -236,6 +237,7 @@ function limpia_(o) {
   Object.keys(o).forEach(k => {
     let v = o[k];
     if (v instanceof Date) v = v.toISOString();
+    if (k === 'id' || k === 'tareaId') v = String(v);
     if (k === 'hecho') v = v === true || v === 'TRUE' || v === 'true';
     if (k === 'orden' || k === 'size') v = Number(v) || 0;
     r[k] = v;
@@ -243,7 +245,8 @@ function limpia_(o) {
   return r;
 }
 
-function uid_() { return Utilities.getUuid().slice(0, 8); }
+// Siempre empieza por letra: un id solo de cifras (p. ej. 12345678 o 1e234567) la hoja lo convertía en número
+function uid_() { return 't' + Utilities.getUuid().replace(/-/g, '').slice(0, 9); }
 
 function out_(o) {
   return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
@@ -274,4 +277,25 @@ function setup() {
   }
   carpetaTri_(tri, true);
   Logger.log('Listo. Carpeta: ' + carpetaTri_(tri, false).getUrl());
+}
+
+/** Repara ids que la hoja convirtió en número (ejecutar una vez). */
+function repararIds() {
+  const st = hoja_('Tareas', H_TAREAS), sa = hoja_('Archivos', H_ARCH);
+  st.getRange('A:C').setNumberFormat('@'); sa.getRange('A:C').setNumberFormat('@');
+  const dt = st.getDataRange().getValues(), da = sa.getDataRange().getValues();
+  const mapa = {};
+  let n = 0;
+  for (let i = 1; i < dt.length; i++) {
+    if (dt[i][0] !== '' && typeof dt[i][0] !== 'string') {
+      const nuevo = uid_(); mapa[String(dt[i][0])] = nuevo;
+      st.getRange(i + 1, 1).setValue(nuevo); n++;
+    }
+  }
+  for (let i = 1; i < da.length; i++) {
+    const k = String(da[i][1]);
+    if (mapa[k]) sa.getRange(i + 1, 2).setValue(mapa[k]);
+    if (da[i][0] !== '' && typeof da[i][0] !== 'string') sa.getRange(i + 1, 1).setValue(uid_());
+  }
+  Logger.log('Ids reparados: ' + n);
 }
