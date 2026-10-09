@@ -63,6 +63,7 @@ a{color:inherit}
 .iconbtn{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;color:var(--muted);transition:.2s var(--ease);position:relative;overflow:hidden}
 .iconbtn:hover{background:var(--card2);color:var(--text)}
 .iconbtn:active{transform:scale(.9)}
+.iconbtn.nx:hover{color:var(--a2);background:rgba(34,211,238,.12)}
 .iconbtn.del:hover{color:var(--danger);background:rgba(251,113,133,.12)}
 .ripple{position:absolute;border-radius:50%;background:rgba(255,255,255,.35);transform:scale(0);animation:rip .6s ease-out forwards;pointer-events:none}
 @keyframes rip{to{transform:scale(4);opacity:0}}
@@ -311,6 +312,7 @@ a{color:inherit}
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></symbol>
   <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
   <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
   <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
   <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16M3 12a9 9 0 0 1 15.5-6.2L21 8M21 3v5h-5M3 21v-5h5"/></symbol>
@@ -684,6 +686,7 @@ function cardHTML(t, i){
     <div class="acts">
       <button class="iconbtn" data-act="up" title="Subir documentos"><svg class="ico"><use href="#i-clip"/></svg></button>
       <button class="iconbtn" data-act="edit" title="Editar"><svg class="ico"><use href="#i-edit"/></svg></button>
+      <button class="iconbtn nx" data-act="next" title="Copiar al siguiente trimestre"><svg class="ico"><use href="#i-next"/></svg></button>
       <button class="iconbtn del" data-act="del" title="Borrar"><svg class="ico"><use href="#i-trash"/></svg></button>
     </div>
     <div class="files"><div><div class="flist">
@@ -716,6 +719,7 @@ $('#list').addEventListener('click', e => {
     case 'open': S.open.has(id) ? S.open.delete(id) : S.open.add(id); card.classList.toggle('open'); break;
     case 'up': pickFiles(id); break;
     case 'edit': openTask(t); break;
+    case 'next': copiarSiguiente(t, el); break;
     case 'del': confirmar('¿Borrar tarea?', `Se borrará “${t.titulo}”${S.archivos.some(a => a.tareaId === id) ? ' y sus documentos irán a la papelera de Drive' : ''}.`, () => borrar(t)); break;
     case 'delf': { const fid = el.closest('.file').dataset.fid, a = S.archivos.find(x => x.id === fid); confirmar('¿Quitar documento?', `“${a.nombre}” irá a la papelera de tu Google Drive (se puede recuperar).`, () => borrarArchivo(a), 'Quitar'); } break;
   }
@@ -733,6 +737,23 @@ async function toggle(t, btn){
   }
   try{ await api('toggle', { id: t.id, hecho: t.hecho }); saveCache(); }
   catch(e){ t.hecho = !t.hecho; bumpResumen(); render(); toast('No se guardó: ' + e.message, 'err'); }
+}
+
+function nextTri(t){ let {y, q} = triParts(t); q++; if (q > 4){ q = 1; y++; } return triKey(y, q); }
+async function copiarSiguiente(t, btn){
+  const to = nextTri(S.tri), p = triParts(to), lbl = `T${p.q} ${p.y}`;
+  btn.disabled = true;
+  btn.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(6px)' }, { transform: 'translateX(0)' }], { duration: 400 });
+  try{
+    const d = await api('datos', { tri: to });
+    if (d.tareas.some(x => x.titulo.trim().toLowerCase() === t.titulo.trim().toLowerCase())){ toast(`“${t.titulo}” ya está en el ${lbl}`); return; }
+    await api('add', { tri: to, titulo: t.titulo, notas: '', icono: t.icono || '📄' });
+    S.resumen[to] = { total: d.tareas.length + 1, hechas: d.tareas.filter(x => x.hecho).length };
+    LS.del('tri_cache_' + to);
+    render();
+    toast(`➜ “${t.titulo}” copiada al ${lbl}`);
+  }catch(e){ toast('No se pudo copiar: ' + e.message, 'err'); }
+  finally{ btn.disabled = false; }
 }
 
 async function borrar(t){

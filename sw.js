@@ -1,5 +1,5 @@
 // Trimestres IVA — service worker
-const V = 'trimestre-v2';
+const V = 'trimestre-v3';
 const SHELL = ['./', './index.html', './manifest.json', './icon.svg', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
