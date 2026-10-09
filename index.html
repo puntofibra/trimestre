@@ -504,16 +504,20 @@ async function api(accion, data = {}){
 }
 function setSync(s){ const el = $('#sync'); if (!el) return; el.className = 'sync' + (s === 'busy' ? ' busy' : s === 'off' ? ' off' : ''); el.title = s === 'busy' ? 'Guardando…' : s === 'off' ? 'Sin conexión' : 'Sincronizado'; }
 
-function uploadXHR(payload, onProg){
-  return new Promise((res, rej) => {
-    const x = new XMLHttpRequest();
-    x.open('POST', API);
-    x.setRequestHeader('Content-Type', 'text/plain;charset=utf-8');
-    x.upload.onprogress = e => e.lengthComputable && onProg(e.loaded / e.total);
-    x.onload = () => { try{ const j = JSON.parse(x.responseText); j.ok ? res(j) : rej(new Error(j.error)); }catch(e){ rej(new Error('Respuesta no válida')); } };
-    x.onerror = () => rej(new Error('Error de red'));
-    x.send(JSON.stringify({ accion: 'subir', pass: S.pass, ...payload }));
-  });
+// Subida con fetch "simple" (sin preflight CORS). XHR con upload.onprogress fuerza un OPTIONS
+// que Apps Script no acepta y da "Error de red", así que el progreso se simula.
+async function uploadXHR(payload, onProg){
+  let p = 0; onProg(0.02);
+  const t = setInterval(() => { p = Math.min(0.92, p + (0.95 - p) * 0.08); onProg(p); }, 250);
+  try{
+    const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ accion: 'subir', pass: S.pass, ...payload }) });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error === 'CLAVE' ? 'Clave incorrecta' : (j.error || 'Error'));
+    onProg(1);
+    return j;
+  }catch(e){
+    throw new Error(e.message === 'Failed to fetch' ? 'Error de red (¿archivo demasiado grande o sin conexión?)' : e.message);
+  }finally{ clearInterval(t); }
 }
 
 /* ======================== LOGIN ======================== */
@@ -785,7 +789,7 @@ async function subir(tareaId, files){
       const j = await uploadXHR({ tareaId, nombre: f.name, mime: f.type, data: b64 }, p => {
         S.up[k].p = p;
         const bar = document.querySelector(`[data-up="${k}"] .prog`);
-        if (bar){ bar.firstElementChild.style.width = Math.round(p * 100) + '%'; if (p >= 1) bar.classList.add('ind'); }
+        if (bar){ bar.firstElementChild.style.width = Math.round(p * 100) + '%'; }
       });
       delete S.up[k];
       S.archivos.push(j.archivo); S.carpeta = j.carpeta; saveCache();
