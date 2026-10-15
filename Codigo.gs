@@ -7,7 +7,7 @@
  */
 
 const SHEET_ID = '1lQwinJ1teQQx1Hf3VveZiaagdeJ40w-q9TiP1nXdViE';
-const H_TAREAS = ['id', 'trimestre', 'titulo', 'notas', 'icono', 'hecho', 'fechaHecho', 'orden', 'creado'];
+const H_TAREAS = ['id', 'trimestre', 'titulo', 'notas', 'icono', 'hecho', 'fechaHecho', 'orden', 'creado', 'gestor', 'fechaGestor'];
 const H_ARCH = ['id', 'tareaId', 'trimestre', 'nombre', 'fileId', 'url', 'mime', 'size', 'fecha'];
 
 /* ---------- Entrada ---------- */
@@ -39,6 +39,7 @@ const ACCIONES = {
   edit: edit_,
   del: del_,
   toggle: toggle_,
+  gestor: gestor_,
   reorder: reorder_,
   copiar: copiar_,
   subir: subir_,
@@ -85,7 +86,7 @@ function add_(r) {
   const titulo = String(r.titulo || '').trim();
   if (!titulo) throw new Error('Falta el título');
   const max = filas_('Tareas', H_TAREAS).filter(t => t.trimestre === r.tri).reduce((m, t) => Math.max(m, t.orden), 0);
-  const t = { id: uid_(), trimestre: r.tri, titulo: titulo, notas: String(r.notas || ''), icono: r.icono || '📄', hecho: false, fechaHecho: '', orden: max + 1, creado: new Date() };
+  const t = { id: uid_(), trimestre: r.tri, titulo: titulo, notas: String(r.notas || ''), icono: r.icono || '📄', hecho: false, fechaHecho: '', orden: max + 1, creado: new Date(), gestor: false, fechaGestor: '' };
   sh.appendRow(H_TAREAS.map(h => t[h]));
   return { ok: true, tarea: limpia_(t) };
 }
@@ -102,6 +103,15 @@ function toggle_(r) {
   return actualiza_(r.id, t => {
     t.hecho = !!r.hecho;
     t.fechaHecho = r.hecho ? new Date() : '';
+    if (!t.hecho) { t.gestor = false; t.fechaGestor = ''; }
+  });
+}
+
+/** El gestor marca que ya se ha descargado la documentación de la tarea. */
+function gestor_(r) {
+  return actualiza_(r.id, t => {
+    t.gestor = !!r.gestor;
+    t.fechaGestor = r.gestor ? new Date() : '';
   });
 }
 
@@ -145,7 +155,7 @@ function copiar_(r) {
   origen.forEach(o => {
     if (yaHay.indexOf(o.titulo.toLowerCase()) >= 0) return;
     orden++; n++;
-    sh.appendRow([uid_(), r.to, o.titulo, o.notas, o.icono, false, '', orden, new Date()]);
+    sh.appendRow([uid_(), r.to, o.titulo, o.notas, o.icono, false, '', orden, new Date(), false, '']);
   });
   return { ok: true, copiadas: n };
 }
@@ -156,7 +166,7 @@ function actualiza_(id, fn) {
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(id)) {
       const t = {};
-      H_TAREAS.forEach((h, j) => t[h] = data[i][j]);
+      H_TAREAS.forEach((h, j) => t[h] = data[i][j] === undefined ? '' : data[i][j]);
       fn(t);
       sh.getRange(i + 1, 1, 1, H_TAREAS.length).setValues([H_TAREAS.map(h => t[h])]);
       return { ok: true, tarea: limpia_(t) };
@@ -216,6 +226,11 @@ function hoja_(nombre, cab) {
     sh.setFrozenRows(1);
     sh.getRange('A:C').setNumberFormat('@');
   }
+  // Columnas nuevas (p. ej. gestor): añade la cabecera si falta
+  const ult = sh.getLastColumn();
+  if (ult < cab.length) {
+    sh.getRange(1, ult + 1, 1, cab.length - ult).setValues([cab.slice(ult)]).setFontWeight('bold').setBackground('#1e1b4b').setFontColor('#ffffff');
+  }
   return sh;
 }
 
@@ -226,7 +241,7 @@ function filas_(nombre, cab) {
   for (let i = 1; i < data.length; i++) {
     if (!data[i][0]) continue;
     const o = {};
-    cab.forEach((h, j) => o[h] = data[i][j]);
+    cab.forEach((h, j) => o[h] = data[i][j] === undefined ? '' : data[i][j]);
     res.push(limpia_(o));
   }
   return res;
@@ -238,7 +253,7 @@ function limpia_(o) {
     let v = o[k];
     if (v instanceof Date) v = v.toISOString();
     if (k === 'id' || k === 'tareaId') v = String(v);
-    if (k === 'hecho') v = v === true || v === 'TRUE' || v === 'true';
+    if (k === 'hecho' || k === 'gestor') v = v === true || v === 'TRUE' || v === 'true';
     if (k === 'orden' || k === 'size') v = Number(v) || 0;
     r[k] = v;
   });
