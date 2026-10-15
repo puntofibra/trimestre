@@ -178,6 +178,17 @@ a{color:inherit}
 .tag.fc{background:rgba(34,211,238,.12);color:#a5f3fc}
 .tag.ok{background:rgba(52,211,153,.12);color:#a7f3d0}
 .tag .ico{width:12px;height:12px}
+/* Descargado por el gestor */
+.gst{display:inline-flex;align-items:center;gap:6px;padding:2px 9px 2px 3px;border-radius:999px;font-size:11.5px;font-weight:600;background:rgba(255,255,255,.04);border:1px solid var(--line);color:var(--muted);cursor:pointer;user-select:none;transition:background .25s,border-color .25s,color .25s}
+.gst:hover{border-color:rgba(96,165,250,.55);color:#bfdbfe}
+.gst .bx{width:16px;height:16px;border-radius:5px;border:1.5px solid rgba(255,255,255,.35);display:grid;place-items:center;font-size:12px;font-weight:900;line-height:1;color:transparent;transition:.25s}
+.gst.on{background:rgba(96,165,250,.18);border-color:rgba(96,165,250,.6);color:#dbeafe}
+.gst.on .bx{background:#60a5fa;border-color:#60a5fa;color:#0b1530}
+.card.done.gestor{background:linear-gradient(135deg,rgba(96,165,250,.14),rgba(124,92,255,.10));border-color:rgba(96,165,250,.55);box-shadow:0 0 0 1px rgba(96,165,250,.25),0 10px 30px -12px rgba(96,165,250,.55)}
+.card.done.gestor h3{text-decoration-color:rgba(96,165,250,.8)}
+.card.done.gestor .chk{filter:drop-shadow(0 0 10px rgba(96,165,250,.6))}
+.card.done.gestor .chk .c{fill:#60a5fa}
+.card.done.gestor .tag.ok{background:rgba(96,165,250,.16);color:#bfdbfe}
 .acts{display:flex;gap:2px}
 .files{grid-column:1/-1;display:grid;grid-template-rows:0fr;transition:grid-template-rows .4s var(--ease)}
 .files>div{overflow:hidden}
@@ -672,7 +683,7 @@ function cardHTML(t, i){
   const ups = Object.values(S.up).filter(u => u.tareaId === t.id);
   const open = S.open.has(t.id) || ups.length;
   const fecha = t.hecho && t.fechaHecho ? new Date(t.fechaHecho).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }) : '';
-  return `<article class="card glass${t.hecho ? ' done' : ''}${open ? ' open' : ''}" data-id="${t.id}" style="${i >= 0 ? `animation-delay:${Math.min(i, 12) * 45}ms` : ''}">
+  return `<article class="card glass${t.hecho ? ' done' : ''}${t.hecho && t.gestor ? ' gestor' : ''}${open ? ' open' : ''}" data-id="${t.id}" style="${i >= 0 ? `animation-delay:${Math.min(i, 12) * 45}ms` : ''}">
     <button class="chk" data-act="chk" aria-label="${t.hecho ? 'Desmarcar' : 'Marcar como hecha'}"><svg viewBox="0 0 34 34"><circle class="c" cx="17" cy="17" r="15"/><path class="t" d="M10.5 17.5l4.2 4.2 8.8-9"/></svg></button>
     <div class="emo">${esc(t.icono || '📄')}</div>
     <div class="body" data-act="open">
@@ -681,6 +692,7 @@ function cardHTML(t, i){
       <div class="meta">
         ${fs.length ? `<span class="tag fc"><svg class="ico"><use href="#i-clip"/></svg>${fs.length} doc${fs.length > 1 ? 's' : ''}</span>` : ''}
         ${fecha ? `<span class="tag ok">✓ ${fecha}</span>` : ''}
+        ${t.hecho ? `<span class="gst${t.gestor ? ' on' : ''}" data-act="gestor" role="checkbox" aria-checked="${!!t.gestor}" title="${t.gestor && t.fechaGestor ? 'Descargado el ' + new Date(t.fechaGestor).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }) : 'Márcalo cuando el gestor lo haya descargado'}"><span class="bx">✕</span>Descargado por el gestor</span>` : ''}
       </div>
     </div>
     <div class="acts">
@@ -716,6 +728,7 @@ $('#list').addEventListener('click', e => {
   const t = S.tareas.find(x => String(x.id) === id);
   switch (el.dataset.act){
     case 'chk': toggle(t, el); break;
+    case 'gestor': marcarGestor(t, el); break;
     case 'open': S.open.has(id) ? S.open.delete(id) : S.open.add(id); card.classList.toggle('open'); break;
     case 'up': pickFiles(id); break;
     case 'edit': openTask(t); break;
@@ -727,6 +740,7 @@ $('#list').addEventListener('click', e => {
 
 async function toggle(t, btn){
   t.hecho = !t.hecho; t.fechaHecho = t.hecho ? new Date().toISOString() : '';
+  if (!t.hecho){ t.gestor = false; t.fechaGestor = ''; }
   const card = btn.closest('.card'); card.classList.toggle('done', t.hecho);
   if (t.hecho){ burst(btn); if (navigator.vibrate) navigator.vibrate(18); }
   bumpResumen();
@@ -737,6 +751,15 @@ async function toggle(t, btn){
   }
   try{ await api('toggle', { id: t.id, hecho: t.hecho }); saveCache(); }
   catch(e){ t.hecho = !t.hecho; bumpResumen(); render(); toast('No se guardó: ' + e.message, 'err'); }
+}
+
+async function marcarGestor(t, el){
+  t.gestor = !t.gestor; t.fechaGestor = t.gestor ? new Date().toISOString() : '';
+  el.classList.toggle('on', t.gestor); el.setAttribute('aria-checked', t.gestor);
+  el.closest('.card').classList.toggle('gestor', t.gestor);
+  if (t.gestor && navigator.vibrate) navigator.vibrate(12);
+  try{ await api('gestor', { id: t.id, gestor: t.gestor }); saveCache(); }
+  catch(e){ t.gestor = !t.gestor; render(); toast('No se guardó: ' + e.message, 'err'); }
 }
 
 function nextTri(t){ let {y, q} = triParts(t); q++; if (q > 4){ q = 1; y++; } return triKey(y, q); }
